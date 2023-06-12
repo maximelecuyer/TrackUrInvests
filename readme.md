@@ -19,10 +19,10 @@ git clone https://github.com/maximelecuyer/TrackUrInvests.git
 
 When it's done 
 
-- your file explorer, go to the TrackUrInvests folder.
+- Open your file explorer, go to the TrackUrInvests folder.
 - Add your fortuneo account exports inside it.
 - Run the main.bat file.
 
 Your sotck market exports are getting analysed and beautiful charts will appear.
 
-# You are done !
+### You are done !
