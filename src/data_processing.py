@@ -15,16 +15,18 @@ class DataProcessing():
         directory_path = path
         file_path = glob.glob(directory_path + "\\*.xls")
         file_path.sort(key=lambda x: os.path.getmtime(x))
-        print(file_path)
         return file_path
 
     def compute_files(self,file_path):
         
-        # for loop to iterate all excel files 
+        # for loop to iterate all excel files
+        i = 0
         for file in file_path:
+
+            print("FILE : ", i)
             # Reading excel files
-            print("Reading file:", file)
             df = pd.read_excel(file, 'Sheet0', skiprows=4)
-            file_name = os.path.basename(file)
-            df['Date de création'] = pd.to_datetime(os.path.getctime(file), unit='s')
-            self.dataframes[file_name] = df
+            self.dataframes[file] = {'data': df, 'creation_date': time.ctime(os.path.getctime(file))}
+
+
+    # TODO : ici on va créer toutes les fonctions pour faire les opérations sur les dataframes et on les appellera ensuite en paramètres des fonctions contenues dans gui.py

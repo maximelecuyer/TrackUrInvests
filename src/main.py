@@ -17,8 +17,8 @@ if __name__ == '__main__':
     dataframes = data_processing.dataframes  # Obtenez les dataframes ici
 
     main_window = MainWindow(dataframes)
-    main_window.plot_diversification()
-    main_window.plot_valorisation()
+    main_window.plot_diversification(dataframes)
+    # main_window.plot_valorisation()
     main_window.show()
 
     sys.exit(app.exec_())

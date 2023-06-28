@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
+import os.path
+import time
 import pandas as pd
 import numpy as np
 import os
@@ -139,15 +141,27 @@ class MainWindow(QMainWindow):
     def plot_valorisation(self):
         
         # Récupère les données de valorisation totale pour chaque DataFrame
+        # Récupère les données de valorisation totale et de date de création pour chaque DataFrame
         valorisation_data = {}
-        for file_name, df in self.dataframes.items():
+        creation_dates = {}
+        creation_date = np.array([])
+        for file_name, data in self.dataframes.items():
+            df = data['data']
             valorisation_data[file_name] = df['Valorisation'].sum()
+            file_name_creation_date = file_name + '_creation_date'
+            np.append(creation_date, self.dataframes[file_name_creation_date])
+
+        # Trie les données par date de création
+        sorted_data = sorted(zip(creation_dates.values(), valorisation_data.values()))
+
+        # Sépare les dates et les valorisations
+        sorted_dates, sorted_valorisations = zip(*sorted_data)
 
         # Crée la figure et le graphique de la courbe de valorisation totale
         figure = Figure()
         ax = figure.add_subplot(111)
-        ax.plot(list(valorisation_data.keys()), list(valorisation_data.values()), marker='o')
-        ax.set_xlabel('Fichier Excel')
+        ax.plot(sorted_valorisations, self.dataframes[file_name_creation_date], marker='o')
+        ax.set_xlabel('Date de création')
         ax.set_ylabel('Valorisation totale')
         ax.set_title('Valorisation totale du portefeuille')
 
@@ -162,61 +176,33 @@ class MainWindow(QMainWindow):
         self.valorisation_tab.setLayout(layout)
 
     
-    def plot_diversification(self):
+    def plot_diversification(self, dataframes):
+
         # Crée le layout pour l'onglet "Diversification"
         self.diversification_tab.setLayout(QVBoxLayout())
 
-        # Obtient les données de la dernière période de chaque DataFrame
-        last_period_data = {}
-        for file_name, df in self.dataframes.items():
-            last_period_data[file_name] = df.iloc[-1]
+        # Obtient le DataFrame du fichier le plus ancien
+        oldest_file = min(dataframes.keys(), key=lambda x: dataframes[x]['creation_date'])
+        oldest_dataframe = dataframes[oldest_file]['data']
 
-        # Obtient les noms et les valeurs des colonnes de diversification
-        diversification_columns = ['Libellé', 'Valorisation']
-        diversification_data = {}
-        for file_name, data in last_period_data.items():
-            diversification_values = data[diversification_columns].values
-            diversification_data[file_name] = diversification_values
+        # Obtient les colonnes pour la répartition des actions
+        columns = ['Libellé', 'Valorisation']
 
-        # Crée la figure et le graphique camembert de la diversification
+        # Obtient les données pour la répartition des actions
+        diversification_data = oldest_dataframe[columns]
+
+        # Crée le graphique camembert
         figure = Figure()
         ax = figure.add_subplot(111)
-        labels = []
-        values = []
-        for file_name, data in diversification_data.items():
-            labels.append(file_name)
-            values.append(data[1])  # Utilise la colonne 'Valorisation'
-        ax.pie(values, labels=labels, autopct='%1.1f%%')
-        ax.set_title('Diversification du portefeuille (Dernière période)')
+        ax.pie(diversification_data['Valorisation'], labels=diversification_data['Libellé'], autopct='%1.1f%%')
+        ax.set_title('Diversification du portefeuille (Fichier le plus ancien)')
 
-        # Affiche la figure dans l'onglet "Diversification"
-        self.diversification_canvas = FigureCanvas(figure)
-        self.diversification_tab.layout().addWidget(self.diversification_canvas)
-
-    def plot_diversification(self):
-        # Obtient les données de la dernière période du fichier Excel le plus récent
-        latest_dataframe = None
-        latest_date = pd.Timestamp.min
-        for file_name, df in self.dataframes.items():
-            file_date = df['Date de création'].max()
-            if file_date > latest_date:
-                latest_date = file_date
-                latest_dataframe = df
-
-        # Vérifie si un fichier a été trouvé
-        if latest_dataframe is not None:
-            # Obtient les colonnes pour la répartition des actions
-            columns = ['Libellé', 'Valorisation']
-
-            # Obtient les données pour la répartition des actions
-            diversification_data = latest_dataframe[columns]
-
-            # Crée le graphique camembert
-            figure = Figure()
-            ax = figure.add_subplot(111)
-            ax.pie(diversification_data['Valorisation'], labels=diversification_data['Libellé'], autopct='%1.1f%%')
-            ax.set_title('Répartition des actions')
-
-             # Affiche la figure dans l'onglet "Diversification"
-            self.diversification_canvas = FigureCanvas(figure)
-            self.diversification_tab.layout().addWidget(self.diversification_canvas)
+        # Supprime le layout existant du widget diversification_tab s'il en a déjà un
+        if self.diversification_tab.layout() is not None:
+            old_layout = self.diversification_tab.layout()
+            old_layout.deleteLater()
+    
+        # Crée un nouveau layout pour le widget diversification_tab
+        layout = QVBoxLayout(self.diversification_tab)
+        layout.addWidget(FigureCanvas(figure))
+        self.diversification_tab.setLayout(layout)
