@@ -36,16 +36,16 @@ class MainWindow(QMainWindow):
         dark_mode = False
         self.dark_mode_button = QPushButton("Dark Mode")
         self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
-        self.dark_mode_button.setFixedSize(100, 30)  # Définir une taille fixe pour le bouton
+        self.dark_mode_button.setFixedSize(70, 30)  # Définir une taille fixe pour le bouton
 
         self.choose_folder_button = QPushButton("Sélectionner le dossier")
         self.choose_folder_button.clicked.connect(self.choose_folder)
-        self.choose_folder_button.setFixedSize(200, 30)
+        self.choose_folder_button.setFixedSize(150, 30)
 
         self.validate_button = QPushButton("Valider")
         self.validate_button.hide()
         self.validate_button.clicked.connect(self.load_data)
-        self.validate_button.setFixedSize(200, 30)
+        self.validate_button.setFixedSize(90, 30)
 
         # Onglets
         self.tabs = QTabWidget()
