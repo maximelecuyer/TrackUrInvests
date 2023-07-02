@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 from data_processing import DataProcessing
 
 class MainWindow(QMainWindow):
-    def __init__(self, dataframes):
+    def __init__(self):
         super().__init__()
         self.setWindowTitle("Suivi de Performance - Portefeuille")
         self.setGeometry(100, 100, 800, 600)
@@ -29,7 +29,8 @@ class MainWindow(QMainWindow):
         self.portfolio_value_label.setAlignment(Qt.AlignLeft)
         self.portfolio_value_label.setFont(QFont("Arial", 12))
 
-        self.dataframes = dataframes
+        self.dataframes = None
+        self.folder_path = None
         
         # Bouton pour le mode sombre / clair
         dark_mode = False
@@ -37,17 +38,21 @@ class MainWindow(QMainWindow):
         self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
         self.dark_mode_button.setFixedSize(100, 30)  # Définir une taille fixe pour le bouton
 
-
-        # Bouton pour sélectionner le dossier de relevés de compte
         self.choose_folder_button = QPushButton("Sélectionner le dossier")
         self.choose_folder_button.clicked.connect(self.choose_folder)
+        self.choose_folder_button.setFixedSize(200, 30)
+
+        self.validate_button = QPushButton("Valider")
+        self.validate_button.hide()
+        self.validate_button.clicked.connect(self.load_data)
+        self.validate_button.setFixedSize(200, 30)
 
         # Onglets
         self.tabs = QTabWidget()
 
         # Onglet pour la courbe de valorisation
-        self.portfolio_curve_tab = QWidget()
-        self.tabs.addTab(self.portfolio_curve_tab, "Valorisation")
+        self.valorisation_tab = QWidget()
+        self.tabs.addTab(self.valorisation_tab, "Valorisation")
 
         # Onglet pour la diversification
         self.diversification_tab = QWidget()
@@ -65,15 +70,17 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout()
         header_layout = QHBoxLayout()
         header_layout.addWidget(self.portfolio_value_label)
-        header_layout.addWidget(self.dark_mode_button)
+
         main_layout.addLayout(header_layout)
-        main_layout.addWidget(self.choose_folder_button)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.choose_folder_button)
+        buttons_layout.addWidget(self.validate_button)
+        buttons_layout.addWidget(self.dark_mode_button)
+        buttons_layout.addStretch(1)
+        main_layout.addLayout(buttons_layout)
+        
         main_layout.addWidget(self.tabs)
-        # Crée le layout pour l'onglet "Diversification"
-        self.diversification_tab.setLayout(QVBoxLayout())
-        # Onglet pour la courbe de valorisation
-        self.valorisation_tab = QWidget()
-        self.tabs.addTab(self.valorisation_tab, "Valorisation")
 
         # Widget central
         central_widget = QWidget()
@@ -96,10 +103,20 @@ class MainWindow(QMainWindow):
             self.set_button_style("")
             self.set_tab_style("")
 
+    
     def choose_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Sélectionner le dossier")
-        # Traiter le dossier sélectionné ici
-        self.file_path = folder_path
+        if folder_path:
+            self.folder_path = folder_path
+            self.validate_button.show()
+
+
+    def load_data(self):
+        self.dataframes = DataProcessing(self.folder_path)
+        self.plot_diversification(self.dataframes.get_oldest_dataframe())
+        self.plot_valorisation(self.dataframes.get_dataframes())
+        self.show()
+
 
     def create_graph_tab(self):
         layout = QVBoxLayout()
@@ -122,34 +139,30 @@ class MainWindow(QMainWindow):
         self.dark_mode_button = QPushButton("Dark Mode")
         self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
         layout.addWidget(self.dark_mode_button)
-
         self.settings_tab.setLayout(layout)
 
-    def choose_folder(self):
-        folder_path = QFileDialog.getExistingDirectory(self, "Choisir un dossier")
-        # Traiter le dossier sélectionné ici
 
     def set_button_style(self, style):
         for button in self.findChildren(QPushButton):
             button.setStyleSheet(style)
+
 
     def set_tab_style(self, style):
         tabs = self.findChildren(QTabBar)
         for tab in tabs:
             tab.setStyleSheet(style)
 
-    def plot_valorisation(self):
-        
-        # Récupère les données de valorisation totale pour chaque DataFrame
-        # Récupère les données de valorisation totale et de date de création pour chaque DataFrame
+
+    def plot_valorisation(self, dataframes):
+            # Récupère les données de valorisation totale et de date de création pour chaque DataFrame
         valorisation_data = {}
         creation_dates = {}
-        creation_date = np.array([])
-        for file_name, data in self.dataframes.items():
+        for file_name, data in dataframes.items():
+            print(file_name)
             df = data['data']
-            valorisation_data[file_name] = df['Valorisation'].sum()
-            file_name_creation_date = file_name + '_creation_date'
-            np.append(creation_date, self.dataframes[file_name_creation_date])
+            print(df)
+            valorisation_data[file_name] = pd.to_numeric(df['Valorisation'], errors='coerce').sum()            
+            creation_dates[file_name] = pd.to_datetime(data['creation_date'])
 
         # Trie les données par date de création
         sorted_data = sorted(zip(creation_dates.values(), valorisation_data.values()))
@@ -160,7 +173,16 @@ class MainWindow(QMainWindow):
         # Crée la figure et le graphique de la courbe de valorisation totale
         figure = Figure()
         ax = figure.add_subplot(111)
-        ax.plot(sorted_valorisations, self.dataframes[file_name_creation_date], marker='o')
+        
+        # Filtrer les données pour ne conserver que les dates avec des valorisations correspondantes
+        filtered_dates = []
+        filtered_valorisations = []
+        for date, valorisation in zip(sorted_dates, sorted_valorisations):
+            if not pd.isnull(valorisation):
+                filtered_dates.append(date)
+                filtered_valorisations.append(valorisation)
+
+        ax.plot(filtered_dates, filtered_valorisations, marker='o')
         ax.set_xlabel('Date de création')
         ax.set_ylabel('Valorisation totale')
         ax.set_title('Valorisation totale du portefeuille')
@@ -175,33 +197,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(FigureCanvas(figure))
         self.valorisation_tab.setLayout(layout)
 
-    
-    def plot_diversification(self, dataframes):
-
-        # Crée le layout pour l'onglet "Diversification"
-        self.diversification_tab.setLayout(QVBoxLayout())
-
-        # Obtient le DataFrame du fichier le plus ancien
-        oldest_file = min(dataframes.keys(), key=lambda x: dataframes[x]['creation_date'])
-        oldest_dataframe = dataframes[oldest_file]['data']
-
-        # Obtient les colonnes pour la répartition des actions
-        columns = ['Libellé', 'Valorisation']
-
-        # Obtient les données pour la répartition des actions
-        diversification_data = oldest_dataframe[columns]
+        
+    def plot_diversification(self, dataframe):
 
         # Crée le graphique camembert
         figure = Figure()
         ax = figure.add_subplot(111)
-        ax.pie(diversification_data['Valorisation'], labels=diversification_data['Libellé'], autopct='%1.1f%%')
-        ax.set_title('Diversification du portefeuille (Fichier le plus ancien)')
+        ax.pie(dataframe['Poids'], labels=dataframe['Libellé'])
+        ax.set_title('Diversification du portefeuille')
 
         # Supprime le layout existant du widget diversification_tab s'il en a déjà un
         if self.diversification_tab.layout() is not None:
             old_layout = self.diversification_tab.layout()
             old_layout.deleteLater()
-    
+
         # Crée un nouveau layout pour le widget diversification_tab
         layout = QVBoxLayout(self.diversification_tab)
         layout.addWidget(FigureCanvas(figure))

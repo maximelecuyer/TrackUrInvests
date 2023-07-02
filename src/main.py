@@ -10,15 +10,13 @@ from data_processing import DataProcessing
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    data_processing = DataProcessing()
-    path = "C:\\Users\\thema\\Documents\\Fortuneo"
-    file_paths = data_processing.get_files_path(path)
-    data_processing.compute_files(file_paths)
-    dataframes = data_processing.dataframes  # Obtenez les dataframes ici
-
-    main_window = MainWindow(dataframes)
-    main_window.plot_diversification(dataframes)
-    # main_window.plot_valorisation()
+    # path = "C:\\Users\\thema\\Documents\\Fortuneo"
+    # data_processing = DataProcessing(path)
+    # dataframes = data_processing.dataframes  # Obtenez les dataframes ici
+    # main_window = MainWindow(dataframes)
+    main_window = MainWindow()
+    # main_window.plot_diversification(data_processing.get_oldest_dataframe())
+    # main_window.plot_valorisation(dataframes)
     main_window.show()
 
     sys.exit(app.exec_())
