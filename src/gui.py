@@ -116,6 +116,7 @@ class MainWindow(QMainWindow):
         self.plot_diversification(self.dataframes.get_oldest_dataframe())
         self.plot_valorisation(self.dataframes.get_dataframes())
         self.show()
+        self.portfolio_value_label.setText(str(self.dataframes.get_last_valorisation()) + " €")
 
 
     def create_graph_tab(self):
@@ -158,9 +159,7 @@ class MainWindow(QMainWindow):
         valorisation_data = {}
         creation_dates = {}
         for file_name, data in dataframes.items():
-            print(file_name)
             df = data['data']
-            print(df)
             valorisation_data[file_name] = pd.to_numeric(df['Valorisation'], errors='coerce').sum()            
             creation_dates[file_name] = pd.to_datetime(data['creation_date'])
 
@@ -187,6 +186,8 @@ class MainWindow(QMainWindow):
         ax.set_ylabel('Valorisation totale')
         ax.set_title('Valorisation totale du portefeuille')
 
+        figure.tight_layout()
+
         # Supprime le layout existant du widget valorisation_tab s'il en a déjà un
         if self.valorisation_tab.layout() is not None:
             old_layout = self.valorisation_tab.layout()
@@ -205,6 +206,8 @@ class MainWindow(QMainWindow):
         ax = figure.add_subplot(111)
         ax.pie(dataframe['Poids'], labels=dataframe['Libellé'])
         ax.set_title('Diversification du portefeuille')
+
+        figure.tight_layout()
 
         # Supprime le layout existant du widget diversification_tab s'il en a déjà un
         if self.diversification_tab.layout() is not None:

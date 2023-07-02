@@ -12,10 +12,13 @@ class DataProcessing():
     def __init__(self, path):
         self.dataframes = {}
         self.list_actions = set()
+        
         # Getting excel files from the specified directory
         directory_path = path
         self.file_path = glob.glob(directory_path + "\\*.xls")
         self.file_path.sort(key=lambda x: os.path.getmtime(x))
+
+        
                 
         # for loop to iterate all excel files
         for file in self.file_path:
@@ -63,6 +66,11 @@ class DataProcessing():
                 action_values.append(df_action.iloc[0].values)
         
         return action_values
+
+    def get_last_valorisation(self):
+        df = self.get_oldest_dataframe()
+        self.last_valorisation = pd.to_numeric(df['Valorisation'], errors='coerce').sum()
+        return self.last_valorisation
 
 
     # TODO : ici on va créer toutes les fonctions pour faire les opérations sur les dataframes et on les appellera ensuite en paramètres des fonctions contenues dans gui.py
