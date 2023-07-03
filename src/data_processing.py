@@ -19,7 +19,6 @@ class DataProcessing():
         self.file_path.sort(key=lambda x: os.path.getmtime(x))
 
         
-                
         # for loop to iterate all excel files
         for file in self.file_path:
             # Reading date of excel files
@@ -31,7 +30,7 @@ class DataProcessing():
             df = pd.read_excel(file, 'Sheet0', skiprows=4)
             self.dataframes[file] = {'data': df, 'creation_date': creation_date}
         
-        self.lister_actions(self.dataframes)
+        self.list_actions=self.get_unique_actions()
 
 
     def get_oldest_dataframe(self):
@@ -49,23 +48,33 @@ class DataProcessing():
 
     def get_dataframes(self):
          return self.dataframes
+    
+    def get_unique_actions(self):
+        actions = set()
+        for file_name in self.dataframes.values():
+            df = file_name['data']
+            if 'Libellé' in df.columns:
+                actions.update(df['Libellé'].unique())
+        actions = sorted(actions)
+        
+        return list(actions)
 
-    def lister_actions(self, dataframes):
-        for df in dataframes.values():
-            self.list_actions.update(df['data']['Libellé'].unique())
 
     def get_list_actions(self):
          return self.list_actions
 
-    def get_action_values(dataframes, action_name):
+
+    def get_action_values(self, action_name):
         action_values = []
         
-        for df in dataframes.values():
-            df_action = df[df['data']['Libellé'] == action_name]
+        for df_data in self.dataframes.values():
+            df = df_data['data']
+            df_action = df[df['Libellé'] == action_name]
             if not df_action.empty:
                 action_values.append(df_action.iloc[0].values)
         
         return action_values
+
 
     def get_last_valorisation(self):
         df = self.get_oldest_dataframe()
@@ -73,4 +82,17 @@ class DataProcessing():
         return self.last_valorisation
 
 
-    # TODO : ici on va créer toutes les fonctions pour faire les opérations sur les dataframes et on les appellera ensuite en paramètres des fonctions contenues dans gui.py
+    def get_action_performance(self, action_name):
+        action_data = []
+        
+        for file_name, df_data in self.dataframes.items():
+            df = df_data['data']
+            df_action = df.loc[df['Libellé'] == action_name]
+            if not df_action.empty:
+                value = df_action.iloc[0]['Cours']
+                creation_date = df_data['creation_date']
+                action_data.append((value, creation_date))
+        
+        return action_data
+
+# TODO : ici on va créer toutes les fonctions pour faire les opérations sur les dataframes et on les appellera ensuite en paramètres des fonctions contenues dans gui.py

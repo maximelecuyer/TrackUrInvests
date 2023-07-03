@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
-import sys
-import os.path
-import time
 import pandas as pd
 import numpy as np
-import os
-import glob
-import os.path, time
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel, QPushButton, QFileDialog, QTabBar
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel, QPushButton, QFileDialog, QTabBar, QComboBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -28,12 +22,12 @@ class MainWindow(QMainWindow):
         self.portfolio_value_label = QLabel()
         self.portfolio_value_label.setAlignment(Qt.AlignLeft)
         self.portfolio_value_label.setFont(QFont("Arial", 12))
-
+        
         self.dataframes = None
         self.folder_path = None
+        self.list_actions = None
         
         # Bouton pour le mode sombre / clair
-        dark_mode = False
         self.dark_mode_button = QPushButton("Dark Mode")
         self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
         self.dark_mode_button.setFixedSize(70, 30)  # Définir une taille fixe pour le bouton
@@ -115,24 +109,32 @@ class MainWindow(QMainWindow):
         self.dataframes = DataProcessing(self.folder_path)
         self.plot_diversification(self.dataframes.get_oldest_dataframe())
         self.plot_valorisation(self.dataframes.get_dataframes())
+        self.list_actions = self.dataframes.get_list_actions()
+        self.create_graph_tab()
         self.show()
         self.portfolio_value_label.setText(str(self.dataframes.get_last_valorisation()) + " €")
-
-
+        
+        # Ajoute les actions à la liste déroulante
+        actions = self.dataframes.get_list_actions()
+        self.action_selection_combobox.clear()
+        self.action_selection_combobox.currentIndexChanged.connect(self.plot_action_performance)
+        self.action_selection_combobox.addItems(actions)
+    
     def create_graph_tab(self):
-        layout = QVBoxLayout()
-        label = QLabel("Valorisation totale du portefeuille:")
-        layout.addWidget(label)
+        # Layout pour l'onglet "Performances par action"
+        action_performance_layout = QVBoxLayout(self.action_performance_tab)
 
-        self.portfolio_value_label = QLabel()
-        self.portfolio_value_label.setFont(QFont("Arial", 14))
-        layout.addWidget(self.portfolio_value_label)
+        # Menu déroulant pour sélectionner une action
+        self.action_selection_combobox = QComboBox()
+        self.action_selection_combobox.currentIndexChanged[str].connect(self.plot_action_performance)
+        self.action_selection_combobox.addItems(self.list_actions)
+        action_performance_layout.addWidget(self.action_selection_combobox)
 
-        self.choose_folder_button = QPushButton("Choisir un dossier")
-        self.choose_folder_button.clicked.connect(self.choose_folder)
-        layout.addWidget(self.choose_folder_button)
+        # Autres éléments de l'interface spécifiques à l'onglet "Performances par action"
+        # ...
 
-        self.graph_tab.setLayout(layout)
+        # Définir le layout pour l'onglet "Performances par action"
+        self.action_performance_tab.setLayout(action_performance_layout)
 
 
     def create_settings_tab(self):
@@ -152,6 +154,46 @@ class MainWindow(QMainWindow):
         tabs = self.findChildren(QTabBar)
         for tab in tabs:
             tab.setStyleSheet(style)
+
+    
+    def plot_action_performance(self):
+
+        selected_action = self.action_selection_combobox.currentText()
+
+        if selected_action:
+            action_data = self.dataframes.get_action_performance(selected_action)
+
+            # Extracting the values and creation dates from the action data
+            values = [data[0] for data in action_data]
+            creation_dates = [data[1] for data in action_data]
+
+            # Sort the values and dates in ascending order based on dates
+            sorted_data = sorted(zip(creation_dates, values))
+            sorted_dates, sorted_values = zip(*sorted_data)
+
+            # Creating the figure and plot for action performance
+            figure = Figure()
+            ax = figure.add_subplot(111)
+
+            ax.plot(sorted_dates, sorted_values, marker='o')
+            ax.set_xlabel('Date de création')
+            ax.set_ylabel('Valeur de l\'action')
+            ax.set_title('Performance de l\'action : {}'.format(selected_action))
+
+            figure.tight_layout()
+
+            # Clearing the layout of the action_performance_tab widget
+            if self.action_performance_tab.layout() is not None:
+                old_layout = self.action_performance_tab.layout()
+                old_layout.deleteLater()
+
+
+            # Creating a new layout for the action_performance_tab widget
+            layout = QVBoxLayout(self.action_performance_tab)
+            self.action_selection_combobox.raise_()
+            layout.addWidget(FigureCanvas(figure))
+            self.action_performance_tab.setLayout(layout)
+
 
 
     def plot_valorisation(self, dataframes):
@@ -204,7 +246,7 @@ class MainWindow(QMainWindow):
         # Crée le graphique camembert
         figure = Figure()
         ax = figure.add_subplot(111)
-        ax.pie(dataframe['Poids'], labels=dataframe['Libellé'])
+        ax.pie(dataframe['Poids'], labels=dataframe['Libellé'], autopct='%1.1f%%')
         ax.set_title('Diversification du portefeuille')
 
         figure.tight_layout()
