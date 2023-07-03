@@ -56,7 +56,7 @@ class DataProcessing():
             if 'Libellé' in df.columns:
                 actions.update(df['Libellé'].unique())
         actions = sorted(actions)
-        
+        # actions.insert(0, 'None')
         return list(actions)
 
 
