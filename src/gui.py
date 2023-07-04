@@ -23,25 +23,19 @@ class MainWindow(QMainWindow):
         self.folder_path = None
         self.list_actions = None
 
-        # Bouton pour le mode sombre / clair
-        self.dark_mode_button = QPushButton("Dark Mode")
-        self.dark_mode_button.clicked.connect(self.toggle_dark_mode)
-        # Définir une taille fixe pour le bouton
-        self.dark_mode_button.setFixedSize(70, 30)
-
         self.choose_folder_button = QPushButton("Sélectionner le dossier")
         self.choose_folder_button.clicked.connect(self.choose_folder)
-        self.choose_folder_button.setFixedSize(150, 30)
+        self.choose_folder_button.setFixedSize(250, 30)
 
         self.validate_button = QPushButton("Valider")
         self.validate_button.hide()
         self.validate_button.clicked.connect(self.load_data)
-        self.validate_button.setFixedSize(90, 30)
+        self.validate_button.setFixedSize(160, 30)
 
         # Champ de texte pour la valorisation totale
         self.portfolio_value_label = QLabel()
         self.portfolio_value_label.setAlignment(Qt.AlignLeft)
-        self.portfolio_value_label.setFont(QFont("Arial", 12))
+        self.portfolio_value_label.setFont(QFont("Arial", 22, QFont.Bold))
 
         # Onglets
         self.tabs = QTabWidget()
@@ -68,7 +62,6 @@ class MainWindow(QMainWindow):
         buttons_layout = QHBoxLayout()
         buttons_layout.addWidget(self.choose_folder_button)
         buttons_layout.addWidget(self.validate_button)
-        buttons_layout.addWidget(self.dark_mode_button)
         buttons_layout.addStretch(1)
         header_layout.addLayout(buttons_layout)
         header_layout.addWidget(self.portfolio_value_label)
@@ -79,6 +72,85 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+
+        # Appliquer le style initial
+        self.apply_styles()
+
+    def apply_styles(self):
+        # Style général de la fenêtre
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #F0F0F0;
+            }
+        """)
+
+        # Style des boutons
+        button_style = """
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                font-size: 12px;
+                border-radius: 4px;
+            }
+
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """
+
+        self.choose_folder_button.setStyleSheet(button_style)
+        self.validate_button.setStyleSheet(button_style)
+
+        # Style des onglets
+        tab_style = """
+            QTabWidget::tab-bar {
+                alignment: left;
+                width: 700px; /* Ajuster la largeur des onglets ici */
+            }
+
+            QTabBar::tab {
+                background-color: #2196F3;
+                color: white;
+                padding: 12px 16px; /* Ajuster le padding vertical et horizontal ici */
+                font-size: 14px;
+                border: 1px solid #CCCCCC; /* Ajouter une bordure ici */
+                border-radius: 4px; /* Ajouter une bordure arrondie ici */
+            }
+
+            QTabBar::tab:selected {
+                background-color: #1976D2;
+            }
+
+            QTabBar::tab:hover {
+                background-color: #1976D2;
+            }
+
+            QTabBar::tab:!selected {
+                background-color: #BBDEFB;
+                color: #424242;
+            }
+            QTabBar::scroller {
+                width: 0;
+            }
+        """
+        
+
+        self.tabs.setStyleSheet(tab_style)
+
+        # Style du label de la valorisation totale
+        self.portfolio_value_label.setStyleSheet("""
+            QLabel {
+                font-size: 22px;
+                color: #007F00;
+                margin: 10px;
+            }
+        """)
 
     def toggle_dark_mode(self):
         if self.dark_mode_button.text() == "Dark Mode":
@@ -177,11 +249,12 @@ class MainWindow(QMainWindow):
                 'Performance de l\'action : {}'.format(selected_action))
 
             figure.tight_layout()
-
+            
             # Clearing the layout of the action_performance_tab widget
             if self.action_performance_tab.layout() is not None:
                 old_layout = self.action_performance_tab.layout()
                 old_layout.deleteLater()
+                
 
             # Creating a new layout for the action_performance_tab widget
             layout = QVBoxLayout(self.action_performance_tab)
@@ -245,6 +318,7 @@ class MainWindow(QMainWindow):
         ax.set_title('Diversification du portefeuille')
 
         figure.tight_layout()
+        
 
         # Supprime le layout existant du widget diversification_tab s'il en a déjà un
         if self.diversification_tab.layout() is not None:
