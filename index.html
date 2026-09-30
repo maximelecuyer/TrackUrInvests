@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrackUrInvests</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><path d='M6 22l7-7 5 5 8-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>TrackUrInvests</h1>
+      <p id="folder-status" class="muted">Aucun dossier sélectionné</p>
+    </div>
+    <div class="actions">
+      <button id="btn-pick" class="primary" type="button">Choisir le dossier d'exports</button>
+      <button id="btn-reload" type="button" hidden>Recharger</button>
+      <label class="file-fallback" id="fallback-label" hidden>
+        <span class="button-like primary">Choisir le dossier d'exports</span>
+        <input id="input-folder" type="file" webkitdirectory multiple />
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section id="empty-state" class="card empty">
+      <h2>Suivez votre compte Fortuneo à partir de vos exports</h2>
+      <ol>
+        <li>Dans l'espace client Fortuneo, onglet Bourse, exportez l'<strong>historique des opérations</strong> (et si possible l'<strong>état du portefeuille</strong>) au format Excel ou CSV.</li>
+        <li>Rangez tous vos exports dans un même dossier. Les doublons entre exports qui se chevauchent sont supprimés automatiquement.</li>
+        <li>Choisissez ce dossier ici. Sur Chrome et Edge, il est mémorisé pour les prochaines visites.</li>
+      </ol>
+      <p class="muted">Vos fichiers sont lus uniquement dans votre navigateur. Seuls les codes des titres sont envoyés à Yahoo Finance pour récupérer les cours.</p>
+      <button id="btn-demo" type="button">Essayer avec des données d'exemple</button>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div id="notices"></div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Évolution et comparaison au marché</h2>
+            <p class="muted" id="timeline-caption"></p>
+          </div>
+          <div class="controls">
+            <label>Indice
+              <select id="select-benchmark"></select>
+            </label>
+            <div class="segmented" id="range-buttons" role="group" aria-label="Période">
+              <button type="button" data-range="1">1 an</button>
+              <button type="button" data-range="3">3 ans</button>
+              <button type="button" data-range="0" class="active">Tout</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-box tall"><canvas id="chart-timeline" aria-label="Évolution du portefeuille"></canvas></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <h2>Plus-values latentes par ligne</h2>
+          <div class="chart-box" id="box-gains"><canvas id="chart-gains" aria-label="Plus-values latentes par ligne"></canvas></div>
+        </section>
+        <section class="card">
+          <h2>Répartition</h2>
+          <div class="chart-box" id="box-allocation"><canvas id="chart-allocation" aria-label="Répartition du portefeuille"></canvas></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Dividendes et frais par année</h2>
+        <div class="chart-box"><canvas id="chart-income" aria-label="Dividendes et frais par année"></canvas></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Lignes</h2>
+          <label class="inline"><input type="checkbox" id="show-closed" /> Afficher les lignes soldées</label>
+        </div>
+        <div class="table-wrap">
+          <table id="positions-table">
+            <thead>
+              <tr>
+                <th>Titre</th>
+                <th title="Symbole Yahoo Finance utilisé pour les cours. Modifiable.">Symbole</th>
+                <th class="num">Qté</th>
+                <th class="num">PRU</th>
+                <th class="num">Cours</th>
+                <th class="num">Valorisation</th>
+                <th class="num">+/- latente</th>
+                <th class="num">+/- réalisée</th>
+                <th class="num">Dividendes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <details class="card">
+        <summary>Fichiers lus et opérations</summary>
+        <div id="files-report"></div>
+      </details>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
