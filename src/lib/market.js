@@ -67,16 +67,24 @@ export async function isMarketAvailable() {
 // Places européennes préférées quand un titre est coté à plusieurs endroits.
 const PREFERRED_EXCHANGES = ['PAR', 'AMS', 'GER', 'FRA', 'MIL', 'EBS', 'BRU', 'MCE', 'LSE', 'NMS', 'NYQ'];
 
-/** Cherche le symbole Yahoo d'un titre à partir de son ISIN, sinon de son libellé. */
-export async function resolveSymbol({ isin, label }) {
+/**
+ * Cherche le symbole Yahoo d'un titre à partir de son ISIN, sinon de son libellé.
+ * Le code mnémonique des exports Fortuneo ("AIR LIQUIDE (AI)") départage les
+ * résultats ; à défaut de résultat, on tente la cotation à Paris ("AI.PA").
+ */
+export async function resolveSymbol({ isin, label, ticker }) {
   for (const query of [isin, label].filter(Boolean)) {
     const data = await yahoo(`/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`);
     const quotes = (data.quotes ?? []).filter((q) => q.symbol && q.quoteType !== 'OPTION');
     if (quotes.length === 0) continue;
-    quotes.sort((a, b) => rank(a.exchange) - rank(b.exchange));
-    return quotes[0].symbol;
+    return pickQuote(quotes, ticker).symbol;
   }
-  return null;
+  return ticker ? `${ticker}.PA` : null;
+}
+
+export function pickQuote(quotes, ticker) {
+  const matchesTicker = (q) => ticker && (q.symbol === ticker || q.symbol.startsWith(`${ticker}.`));
+  return [...quotes].sort((a, b) => (matchesTicker(b) - matchesTicker(a)) || rank(a.exchange) - rank(b.exchange))[0];
 }
 
 function rank(exchange) {

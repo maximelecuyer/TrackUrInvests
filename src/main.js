@@ -1,4 +1,4 @@
-import { buildDataset } from './lib/dataset.js';
+import { applySnapshotCost, buildDataset, findSnapshotLine } from './lib/dataset.js';
 import {
   canRememberFolder, forgetFolder, getRememberedFolder, pickFolder, readFileList, readFolder, requestAccess,
 } from './lib/folder.js';
@@ -6,12 +6,12 @@ import {
   BENCHMARKS, clearHistoryCache, getHistory, getSymbolOverrides, isMarketAvailable, resolveSymbol, setSymbolOverride, toEur,
 } from './lib/market.js';
 import { OpType } from './lib/operations.js';
-import { normalizeKey } from './lib/parse.js';
+import { normalizeKey, splitLabel } from './lib/parse.js';
 import { benchmarkCashflows, buildTimeline, portfolioCashflows, xirr } from './lib/performance.js';
 import { computePositions, monthlyIncome, valuePositions } from './lib/portfolio.js';
 import { drawAllocation, drawGains, drawIncome, drawTimeline } from './ui/charts.js';
 import {
-  escapeHtml, fmtEur, fmtEur0, fmtNum, fmtPct, fmtSignedEur, signClass,
+  escapeHtml, fmtDate, fmtEur, fmtEur0, fmtNum, fmtPct, fmtSignedEur, signClass,
 } from './ui/format.js';
 
 const $ = (id) => document.getElementById(id);
@@ -97,7 +97,7 @@ async function loadSecurity(op, from) {
   let symbol = overrides[op.key] ?? resolved[op.key];
   try {
     if (!symbol) {
-      symbol = await resolveSymbol({ isin: op.isin, label: op.label });
+      symbol = await resolveSymbol({ isin: op.isin, label: op.label, ticker: op.ticker });
       if (!symbol) throw new Error('Symbole introuvable, saisissez-le dans le tableau');
       resolved[op.key] = symbol;
       writeSetting(RESOLVED_KEY, JSON.stringify({ ...readResolved(), [op.key]: symbol }));
@@ -110,6 +110,18 @@ async function loadSecurity(op, from) {
     if (symbol) state.symbols.set(op.key, symbol);
     state.series.delete(op.key);
     state.symbolErrors.set(op.key, err.message);
+  }
+}
+
+/** Ligne de prime de fidélité : même cours que l'action d'origine. */
+async function loadAlias(op, from) {
+  const target = state.dataset.aliases.get(op.key);
+  if (state.series.has(target) && !getSymbolOverrides()[op.key]) {
+    state.series.set(op.key, state.series.get(target));
+    state.symbols.set(op.key, state.symbols.get(target));
+    state.symbolErrors.delete(op.key);
+  } else {
+    await loadSecurity({ ...op, isin: '', label: splitLabel(op.label).baseLabel || op.label }, from);
   }
 }
 
@@ -135,11 +147,14 @@ async function loadMarket() {
   state.loadingMarket = true;
   render();
   const from = ops[0].date;
-  const queue = heldKeys();
+  const { aliases } = state.dataset;
+  const held = heldKeys();
+  const queue = held.filter((op) => !aliases.has(op.key));
   const worker = async () => {
     while (queue.length) await loadSecurity(queue.shift(), from);
   };
   await Promise.all([loadBenchmark(from), worker(), worker(), worker(), worker()]);
+  for (const op of held.filter((o) => aliases.has(o.key))) await loadAlias(op, from);
   state.loadingMarket = false;
   render();
 }
@@ -148,64 +163,107 @@ async function loadMarket() {
 // Affichage
 // ---------------------------------------------------------------------------
 
-function currentPrices(positions) {
+function snapshotLine(p) {
+  return findSnapshotLine(state.dataset.snapshot, p);
+}
+
+/** Cours actuel et variation du jour : Yahoo Finance, sinon dernier export du portefeuille. */
+function currentQuotes(positions) {
   const prices = new Map();
-  const snapshot = state.dataset.snapshot;
+  const changes = new Map();
   for (const p of positions) {
     const series = state.series.get(p.key);
     if (series?.length) {
       prices.set(p.key, series[series.length - 1].close);
+      if (series.length > 1) changes.set(p.key, series[series.length - 1].close / series[series.length - 2].close - 1);
       continue;
     }
-    const snap = snapshot.find((s) => (s.isin && s.isin === p.isin) || normalizeKey(s.label) === normalizeKey(p.label));
+    const snap = snapshotLine(p);
     const price = snap?.lastPrice ?? (snap?.marketValue && snap.quantity ? snap.marketValue / snap.quantity : null);
     if (price) prices.set(p.key, price);
+    if (snap?.dayChange !== null && snap?.dayChange !== undefined) changes.set(p.key, snap.dayChange);
   }
-  return prices;
+  for (const [key, target] of state.dataset.aliases) {
+    if (!prices.has(key) && prices.has(target)) prices.set(key, prices.get(target));
+    if (!changes.has(key) && changes.has(target)) changes.set(key, changes.get(target));
+  }
+  return { prices, changes };
 }
 
 function render() {
-  const { operations, report } = state.dataset;
+  const { operations, report, mode } = state.dataset;
   const { positions, totals, warnings } = computePositions(operations);
-  const valued = valuePositions(positions, currentPrices(positions));
+  const quotes = currentQuotes(positions);
+  const valued = valuePositions(mode === 'snapshots' ? applySnapshotCost(positions, state.dataset.snapshot) : positions, quotes.prices).map((p) => ({ ...p, dayChange: quotes.changes.get(p.key) ?? null }));
   const open = valued.filter((p) => p.quantity > 0);
   const unpriced = open.filter((p) => p.marketValue === null);
   const marketValue = open.reduce((s, p) => s + (p.marketValue ?? p.costBasis), 0);
   const unrealized = open.reduce((s, p) => s + (p.unrealized ?? 0), 0);
   const openCost = open.filter((p) => p.unrealized !== null).reduce((s, p) => s + p.costBasis, 0);
+  const totalCost = open.reduce((s, p) => s + p.costBasis, 0);
 
   const { points, estimatedKeys } = buildTimeline(operations, state.series, state.benchSeries, today());
   const last = points[points.length - 1];
   const benchLabel = BENCHMARKS.find((b) => b.symbol === state.benchmark)?.label ?? state.benchmark;
 
+  // Un rendement annualisé ou une comparaison sur quelques jours n'a pas de sens.
+  const historyDays = operations.length ? (Date.parse(today()) - Date.parse(operations[0].date)) / 864e5 : 0;
+  const longEnough = historyDays > 60;
   const flows = portfolioCashflows(operations);
-  const irr = operations.length ? xirr([...flows, { date: today(), amount: marketValue }]) : null;
-  const benchIrr = last?.benchmark ? xirr([...benchmarkCashflows(operations), { date: today(), amount: last.benchmark }]) : null;
+  const irr = longEnough ? xirr([...flows, { date: today(), amount: marketValue }]) : null;
+  const benchIrr = longEnough && last?.benchmark ? xirr([...benchmarkCashflows(operations), { date: today(), amount: last.benchmark }]) : null;
   const totalGain = marketValue + totals.withdrawn + totals.dividends - totals.invested - totals.fees - totals.taxes;
-  const benchGain = last?.benchmark ? last.benchmark - last.invested : null;
+  const benchGain = last?.benchmark && historyDays >= 30 ? last.benchmark - last.invested : null;
 
   renderNotices({ warnings, unpriced, estimatedKeys, positions });
   renderKpis({
+    mode,
     marketValue, unrealized, openCost, totals, totalGain, irr, benchIrr, benchGain, benchLabel,
     netInvested: totals.invested - totals.withdrawn,
+    totalCost,
+    since: operations[0]?.date,
+    historyDays,
   });
 
   const cutoff = state.rangeYears
     ? new Date(Date.now() - state.rangeYears * 365.25 * 864e5).toISOString().slice(0, 10)
     : '';
-  drawTimeline(points.filter((p) => p.date >= cutoff), { benchmarkLabel: benchLabel });
-  $('timeline-caption').textContent = state.benchSeries.length
-    ? `En orange, la valeur qu'aurait aujourd'hui votre argent s'il avait été placé dans ${benchLabel} aux mêmes dates et pour les mêmes montants. Votre portefeuille inclut les dividendes nets de frais.`
+  const visible = points.filter((p) => p.date >= cutoff);
+  $('timeline-empty').hidden = visible.length > 1;
+  $('chart-timeline').hidden = visible.length <= 1;
+  if (visible.length > 1) drawTimeline(visible, { benchmarkLabel: benchLabel });
+  const snapshotNote = mode === 'snapshots'
+    ? ` Historique reconstitué depuis ${state.dataset.snapshotDates.length} export(s) du portefeuille (premier le ${fmtDate(state.dataset.snapshotDates[0])}) : ajoutez régulièrement un export au dossier pour l'enrichir.`
+    : '';
+  $('timeline-caption').textContent = (state.benchSeries.length
+    ? `En orange, la valeur qu'aurait aujourd'hui votre argent s'il avait été placé dans ${benchLabel} aux mêmes dates et pour les mêmes montants.${mode === 'snapshots' ? '' : ' Votre portefeuille inclut les dividendes nets de frais.'}`
     : state.marketAvailable === false
       ? 'Cours de bourse indisponibles : les titres sont valorisés à leur prix de revient.'
-      : 'Chargement des cours…';
+      : 'Chargement des cours…') + snapshotNote;
 
   const byGain = open.filter((p) => p.unrealized !== null).sort((a, b) => b.unrealized - a.unrealized);
   drawGains(byGain);
-  drawAllocation(open.filter((p) => p.marketValue !== null).sort((a, b) => b.marketValue - a.marketValue));
-  drawIncome(yearlyIncome(operations));
+  drawAllocation(groupLoyaltyLines(open.filter((p) => p.marketValue !== null)).sort((a, b) => b.marketValue - a.marketValue));
+  $('card-income').hidden = mode === 'snapshots';
+  if (mode !== 'snapshots') drawIncome(yearlyIncome(operations));
   renderTable(valued);
   renderReport(report, operations);
+}
+
+/** Regroupe les primes de fidélité avec l'action d'origine pour la répartition. */
+function groupLoyaltyLines(positions) {
+  const groups = new Map();
+  for (const p of positions) {
+    const key = state.dataset.aliases.get(p.key) ?? p.key;
+    const g = groups.get(key);
+    if (g) g.marketValue += p.marketValue;
+    else groups.set(key, { label: p.label, marketValue: p.marketValue });
+  }
+  for (const [key, g] of groups) {
+    const main = positions.find((p) => p.key === key);
+    if (main) g.label = main.label;
+  }
+  return [...groups.values()];
 }
 
 function yearlyIncome(operations) {
@@ -228,22 +286,36 @@ function renderKpis(k) {
   const fees = k.totals.brokerage + k.totals.fees + k.totals.taxes;
   const vsBench = k.benchGain !== null
     ? `${escapeHtml(k.benchLabel)} : ${fmtSignedEur(k.benchGain)}${k.benchIrr !== null ? `, ${fmtPct(k.benchIrr)} par an` : ''}`
-    : 'Comparaison indisponible sans cours';
-  $('kpis').innerHTML = [
-    kpi('Valeur actuelle', fmtEur0(k.marketValue), `Net investi : ${fmtEur0(k.netInvested)}`),
-    kpi('Gain total', fmtSignedEur(k.totalGain), k.irr !== null ? `Rendement ${fmtPct(k.irr)} par an` : '', signClass(k.totalGain)),
+    : k.historyDays < 30 ? 'Disponible après un mois d\'historique' : 'Comparaison indisponible sans cours';
+  const snapshots = k.mode === 'snapshots';
+  const tiles = [
+    kpi('Valeur actuelle', fmtEur0(k.marketValue), snapshots ? `Prix de revient : ${fmtEur0(k.totalCost)}` : `Net investi : ${fmtEur0(k.netInvested)}`),
+    kpi(
+      snapshots ? 'Évolution depuis le 1er export' : 'Gain total',
+      fmtSignedEur(k.totalGain),
+      [snapshots && k.since ? `Depuis le ${fmtDate(k.since)}` : '', k.irr !== null ? `Rendement ${fmtPct(k.irr)} par an` : ''].filter(Boolean).join(', '),
+      signClass(k.totalGain),
+    ),
     kpi('Comparé au marché', k.benchGain !== null ? fmtSignedEur(k.totalGain - k.benchGain) : '–', vsBench, signClass(k.benchGain !== null ? k.totalGain - k.benchGain : 0)),
     kpi('Plus-value latente', fmtSignedEur(k.unrealized), k.openCost ? fmtPct(k.unrealized / k.openCost) : '', signClass(k.unrealized)),
-    kpi('Plus-value réalisée', fmtSignedEur(k.totals.realized), 'Sur les ventes', signClass(k.totals.realized)),
-    kpi('Dividendes perçus', fmtEur(k.totals.dividends)),
-    kpi('Frais et taxes', fmtEur(fees), `Courtage ${fmtEur0(k.totals.brokerage)}, autres ${fmtEur0(k.totals.fees + k.totals.taxes)}`),
-  ].join('');
+  ];
+  if (!snapshots) {
+    tiles.push(
+      kpi('Plus-value réalisée', fmtSignedEur(k.totals.realized), 'Sur les ventes', signClass(k.totals.realized)),
+      kpi('Dividendes perçus', fmtEur(k.totals.dividends)),
+      kpi('Frais et taxes', fmtEur(fees), `Courtage ${fmtEur0(k.totals.brokerage)}, autres ${fmtEur0(k.totals.fees + k.totals.taxes)}`),
+    );
+  }
+  $('kpis').innerHTML = tiles.join('');
 }
 
 function renderNotices({ warnings, unpriced, estimatedKeys, positions }) {
   const items = [];
+  if (state.dataset.mode === 'snapshots') {
+    items.push('Seuls des états du portefeuille ont été trouvés : les plus-values réalisées, dividendes et frais ne sont pas disponibles, et l\'historique est estimé d\'après les écarts entre exports. Ajoutez l\'historique des opérations au dossier pour des calculs exacts.');
+  }
   if (state.dataset.operations.length === 0) {
-    items.push('Aucune opération reconnue dans ce dossier. Vérifiez qu\'il contient bien l\'historique des opérations exporté depuis Fortuneo (détail dans « Fichiers lus » en bas de page).');
+    items.push('Aucune opération ni état du portefeuille reconnu dans ce dossier. Vérifiez qu\'il contient bien l\'historique des opérations exporté depuis Fortuneo (détail dans « Fichiers lus » en bas de page).');
   }
   if (state.marketAvailable === false) {
     items.push('Les cours de bourse ne sont pas accessibles. Lancez l\'application avec <code>npm start</code> (et non en ouvrant le fichier HTML directement) et vérifiez votre connexion.');
@@ -262,6 +334,7 @@ function renderNotices({ warnings, unpriced, estimatedKeys, positions }) {
 }
 
 function renderTable(valued) {
+  document.querySelectorAll('#positions-table .ops-only').forEach((th) => { th.hidden = state.dataset.mode === 'snapshots'; });
   const showClosed = $('show-closed').checked;
   const rows = valued
     .filter((p) => showClosed || p.quantity > 0)
@@ -276,10 +349,11 @@ function renderTable(valued) {
       <td class="num">${fmtNum(p.quantity)}</td>
       <td class="num">${fmtEur(p.pru)}</td>
       <td class="num">${fmtEur(p.price)}</td>
+      <td class="num ${signClass(p.dayChange)}">${fmtPct(p.dayChange)}</td>
       <td class="num">${fmtEur0(p.marketValue)}</td>
       <td class="num ${signClass(p.unrealized)}">${fmtSignedEur(p.unrealized)}<br><small>${fmtPct(p.unrealizedPct)}</small></td>
-      <td class="num ${signClass(p.realized)}">${p.realized ? fmtSignedEur(p.realized) : '–'}</td>
-      <td class="num">${p.dividends ? fmtEur(p.dividends) : '–'}</td>
+      ${state.dataset.mode === 'snapshots' ? '' : `<td class="num ${signClass(p.realized)}">${p.realized ? fmtSignedEur(p.realized) : '–'}</td>
+      <td class="num">${p.dividends ? fmtEur(p.dividends) : '–'}</td>`}
     </tr>`;
   }).join('');
 }
@@ -294,7 +368,7 @@ function renderReport(report, operations) {
       <thead><tr><th>Fichier</th><th>Type détecté</th><th class="num">Lignes</th><th>Colonnes</th></tr></thead>
       <tbody>${report.map((r) => `<tr>
         <td>${escapeHtml(r.name)}</td>
-        <td><span class="tag">${KIND_LABELS[r.kind]}</span></td>
+        <td><span class="tag">${KIND_LABELS[r.kind]}</span>${r.date ? ` <small>au ${fmtDate(r.date)}</small>` : ''}</td>
         <td class="num">${r.count}</td>
         <td><small>${escapeHtml(r.error ?? (r.headers ?? []).filter(Boolean).join(', '))}</small></td>
       </tr>`).join('')}</tbody>

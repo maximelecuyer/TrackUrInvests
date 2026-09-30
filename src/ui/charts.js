@@ -73,7 +73,8 @@ export function drawTimeline(points, { benchmarkLabel }) {
     borderColor: color,
     backgroundColor: color,
     borderWidth: 2,
-    pointRadius: 0,
+    // Peu de points (quelques exports) : on les montre, sinon la courbe suffit.
+    pointRadius: points.length < 40 ? 3 : 0,
     pointHoverRadius: 4,
     tension: 0,
     ...extra,

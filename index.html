@@ -27,8 +27,8 @@
     <section id="empty-state" class="card empty">
       <h2>Suivez votre compte Fortuneo à partir de vos exports</h2>
       <ol>
-        <li>Dans l'espace client Fortuneo, onglet Bourse, exportez l'<strong>historique des opérations</strong> (et si possible l'<strong>état du portefeuille</strong>) au format Excel ou CSV.</li>
-        <li>Rangez tous vos exports dans un même dossier. Les doublons entre exports qui se chevauchent sont supprimés automatiquement.</li>
+        <li>Dans l'espace client Fortuneo, onglet Bourse, exportez votre <strong>portefeuille</strong> au format Excel. Si vous pouvez aussi exporter l'<strong>historique des opérations</strong>, ajoutez-le : les calculs deviennent exacts (plus-values réalisées, dividendes, frais).</li>
+        <li>Rangez tous vos exports dans un même dossier, sans les modifier. Déposez-y un nouvel export du portefeuille régulièrement, par exemple chaque mois : chaque export daté enrichit l'historique.</li>
         <li>Choisissez ce dossier ici. Sur Chrome et Edge, il est mémorisé pour les prochaines visites.</li>
       </ol>
       <p class="muted">Vos fichiers sont lus uniquement dans votre navigateur. Seuls les codes des titres sont envoyés à Yahoo Finance pour récupérer les cours.</p>
@@ -57,7 +57,10 @@
             </div>
           </div>
         </div>
-        <div class="chart-box tall"><canvas id="chart-timeline" aria-label="Évolution du portefeuille"></canvas></div>
+        <div class="chart-box tall">
+          <canvas id="chart-timeline" aria-label="Évolution du portefeuille"></canvas>
+          <p id="timeline-empty" class="chart-empty" hidden>La courbe démarre à la date du premier export et s'allonge chaque jour avec les cours de bourse. Revenez dans quelques jours, ou déposez d'anciens exports du portefeuille dans le dossier pour remonter plus loin.</p>
+        </div>
       </section>
 
       <div class="grid-2">
@@ -71,7 +74,7 @@
         </section>
       </div>
 
-      <section class="card">
+      <section class="card" id="card-income">
         <h2>Dividendes et frais par année</h2>
         <div class="chart-box"><canvas id="chart-income" aria-label="Dividendes et frais par année"></canvas></div>
       </section>
@@ -90,10 +93,11 @@
                 <th class="num">Qté</th>
                 <th class="num">PRU</th>
                 <th class="num">Cours</th>
+                <th class="num">Var. jour</th>
                 <th class="num">Valorisation</th>
                 <th class="num">+/- latente</th>
-                <th class="num">+/- réalisée</th>
-                <th class="num">Dividendes</th>
+                <th class="num ops-only">+/- réalisée</th>
+                <th class="num ops-only">Dividendes</th>
               </tr>
             </thead>
             <tbody></tbody>

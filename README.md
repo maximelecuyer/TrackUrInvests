@@ -26,8 +26,8 @@ Le bouton « Essayer avec des données d'exemple » permet de découvrir l'outil
 
 ## Récupérer ses exports Fortuneo
 
-1. Dans l'espace client, onglet Bourse, exportez l'**historique des opérations** (Excel ou CSV). Exportez aussi l'**état du portefeuille** si possible : il aide à identifier les titres (codes ISIN) et donne les derniers cours si Yahoo Finance est injoignable.
-2. Rangez tous les exports dans un même dossier. Vous pouvez y ajouter de nouveaux exports au fil du temps : les opérations présentes dans plusieurs fichiers ne sont comptées qu'une fois.
+1. Dans l'espace client, onglet Bourse, exportez votre **portefeuille** au format Excel (fichier `Export_portefeuille….xls`). Si vous pouvez aussi exporter l'**historique des opérations**, ajoutez-le au dossier : les calculs deviennent exacts.
+2. Rangez tous les exports dans un même dossier, sans les modifier. Déposez-y un nouvel export du portefeuille régulièrement (par exemple chaque mois) : chaque export daté enrichit l'historique. Les copies d'un même export et les opérations présentes dans plusieurs fichiers ne sont comptées qu'une fois.
 3. Dans l'application, cliquez sur « Choisir le dossier d'exports ».
 
 Sur Chrome et Edge, le dossier est mémorisé : aux visites suivantes, un clic sur « Rouvrir » suffit. Sur Firefox et Safari, il faut le resélectionner à chaque fois.
@@ -35,6 +35,20 @@ Sur Chrome et Edge, le dossier est mémorisé : aux visites suivantes, un clic s
 ### Connexion directe à Fortuneo ?
 
 Fortuneo ne propose pas d'API publique. Se connecter automatiquement obligerait à stocker vos identifiants et à contourner la double authentification, ce qui serait fragile et risqué. L'outil s'appuie donc sur les exports.
+
+## Deux modes de fonctionnement
+
+**Avec les exports du portefeuille seulement.** L'export Fortuneo donne, pour une date, chaque ligne avec son ISIN, sa quantité, son PRU et son cours. L'application en tire :
+
+- la valeur actuelle, le PRU et la plus-value latente de chaque ligne, repris tels quels de Fortuneo (donc exacts) ;
+- un historique qui démarre au premier export, à la valeur de marché de ce jour-là, puis suit les cours de bourse. Entre deux exports, une hausse de quantité est comptée comme un achat (pour la hausse du prix de revient total), une baisse comme une vente au cours du jour de l'export ;
+- la comparaison à un indice, dès que l'historique couvre au moins un mois.
+
+Les plus-values réalisées, les dividendes et les frais ne figurent pas dans cet export : ils ne sont pas affichés dans ce mode.
+
+**Avec l'historique des opérations.** Tous les calculs partent des opérations réelles (achats, ventes, dividendes, frais, taxes) depuis l'ouverture du compte. Les exports du portefeuille servent alors à compléter les ISIN et à donner les derniers cours si Yahoo Finance est injoignable.
+
+Si vous avez plusieurs comptes (PEA et compte titres), leurs exports peuvent cohabiter dans le dossier : chaque compte est suivi séparément puis additionné.
 
 ## Formats reconnus
 
@@ -48,7 +62,9 @@ Les fichiers `.xls`, `.xlsx`, `.csv` et `.txt` sont lus. Les colonnes sont recon
 | Quantité | Qté, Quantité, Nombre |
 | Prix | Prix d'exé, Prix d'exécution, Cours d'exécution |
 | Montants | Montant brut, Courtage, Montant net |
-| Portefeuille | Code ISIN, PRU, Cours, Valorisation |
+| Portefeuille | ISIN, PRU, Cours, Dev, Var/Veille, Valorisation |
+
+Dans l'export du portefeuille, la date et le nom du compte sont lus dans les lignes au-dessus du tableau, et le code mnémonique entre parenthèses (« AIR LIQUIDE (AI) ») sert à retrouver le bon symbole de cotation. La colonne Valorisation est recalculée (Cours x Qté) plutôt que lue. Les lignes de prime de fidélité (« AIR LIQUIDE PF27 ») sont valorisées au cours de l'action d'origine et regroupées avec elle dans la répartition.
 
 Les opérations sont classées d'après leur libellé : achat, vente, dividende ou coupon, frais (droits de garde…), taxe (TTF…), virement. Le panneau « Fichiers lus et opérations », en bas de page, indique comment chaque fichier a été interprété et liste les libellés non reconnus.
 
@@ -56,7 +72,7 @@ Si un export n'est pas reconnu, ouvrez une issue avec la ligne d'en-tête du fic
 
 ## Cours de bourse
 
-Pour chaque titre, le symbole Yahoo Finance est retrouvé à partir de l'ISIN, sinon du libellé. Si le symbole trouvé est faux ou manquant, corrigez-le directement dans la colonne « Symbole » du tableau des lignes : le choix est mémorisé. Les titres cotés dans une autre devise sont convertis en euros au taux du jour.
+Pour chaque titre, le symbole Yahoo Finance est retrouvé à partir de l'ISIN, sinon du libellé, en privilégiant le code mnémonique de l'export ; à défaut, la cotation à Paris est tentée (`AI.PA`). Si le symbole trouvé est faux ou manquant, corrigez-le directement dans la colonne « Symbole » du tableau des lignes : le choix est mémorisé. Les titres cotés dans une autre devise sont convertis en euros au taux du jour.
 
 Les cours sont gardés en cache une journée dans le navigateur. Le bouton « Rouvrir » relit le dossier et rafraîchit les cours.
 

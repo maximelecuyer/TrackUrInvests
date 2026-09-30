@@ -65,7 +65,9 @@ const COLUMN_SYNONYMS = {
   gross: ['montant brut', 'brut'],
   fees: ['courtage', 'courtage commission', 'frais', 'commission', 'frais de courtage'],
   net: ['montant net', 'net', 'montant', 'montant operation'],
-  currency: ['devise', 'monnaie', 'currency'],
+  currency: ['devise', 'dev', 'monnaie', 'currency'],
+  dayChange: ['var veille', 'variation veille', 'var jour', 'variation jour'],
+  weight: ['poids'],
   place: ['place', 'marche', 'bourse'],
   pru: ['pru', 'prix de revient', 'prix de revient unitaire', 'pam'],
   lastPrice: ['cours', 'dernier cours', 'cours actuel'],
@@ -82,7 +84,7 @@ export function mapColumns(headers) {
   const mapping = {};
   const used = new Set();
   // Ordre important : les champs précis avant les champs génériques.
-  const order = ['isin', 'date', 'operation', 'quantity', 'pru', 'price', 'gross', 'fees', 'net', 'currency', 'place', 'marketValue', 'lastPrice', 'label'];
+  const order = ['isin', 'date', 'operation', 'quantity', 'pru', 'price', 'gross', 'fees', 'net', 'currency', 'dayChange', 'weight', 'place', 'marketValue', 'lastPrice', 'label'];
   for (const field of order) {
     const idx = headers.findIndex((h, i) => !used.has(i) && matchColumn(h, field));
     if (idx >= 0) {
@@ -156,7 +158,7 @@ function detectDelimiter(text) {
 export function parseRows(rows, fileName = '') {
   const headerIndex = findHeaderRow(rows);
   if (headerIndex < 0) {
-    return { kind: 'unknown', fileName, records: [], headers: rows[0] ?? [] };
+    return { kind: 'unknown', fileName, records: [], headers: rows[0] ?? [], meta: {} };
   }
   const headers = rows[headerIndex].map((h) => String(h ?? '').trim());
   const mapping = mapColumns(headers);
@@ -186,20 +188,66 @@ export function parseRows(rows, fileName = '') {
       });
     } else if (kind === 'positions') {
       const quantity = parseNumber(get(row, 'quantity'));
-      if (!label || quantity === null) continue;
+      if (!label || quantity === null || /^total(\s|:|$)/i.test(label)) continue;
+      const lastPrice = parseNumber(get(row, 'lastPrice'));
       records.push({
-        label,
+        ...splitLabel(label),
         isin: cleanIsin(get(row, 'isin')),
         quantity,
         pru: parseNumber(get(row, 'pru')),
-        lastPrice: parseNumber(get(row, 'lastPrice')),
-        marketValue: parseNumber(get(row, 'marketValue')),
+        lastPrice,
+        // Recalculée plutôt que lue : la colonne Valorisation peut avoir été retouchée.
+        marketValue: lastPrice !== null ? lastPrice * quantity : parseNumber(get(row, 'marketValue')),
+        dayChange: parsePercent(get(row, 'dayChange')),
         currency: cleanText(get(row, 'currency')) || 'EUR',
         source: fileName,
       });
     }
   }
-  return { kind, fileName, records, headers };
+  return { kind, fileName, records, headers, meta: readMeta(rows.slice(0, headerIndex)) };
+}
+
+/**
+ * Lignes au-dessus de l'en-tête des exports Fortuneo :
+ *   Portefeuille <numéro> / (PEA M NOM Prénom) / 30/09/2026
+ * On en tire la date de l'état du portefeuille et le nom du compte.
+ */
+function readMeta(rows) {
+  const cells = rows.flat().filter((c) => c !== null && String(c).trim() !== '');
+  let date = null;
+  let account = '';
+  for (const c of cells) {
+    const text = String(c).trim();
+    if (!date && (c instanceof Date || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(text))) date = parseDate(c);
+    const m = text.match(/^\((.+)\)$/);
+    if (!account && m) account = m[1].trim();
+  }
+  if (!account) account = cells.map(String).find((t) => /^portefeuille/i.test(t))?.trim() ?? '';
+  return { date, account };
+}
+
+/**
+ * "AIR LIQUIDE (AI)" -> { label: "AIR LIQUIDE", ticker: "AI" }
+ * "AIR LIQUIDE PF27   (-)" -> { label: "AIR LIQUIDE PF27", ticker: "", baseLabel: "AIR LIQUIDE" }
+ * baseLabel repère les lignes de prime de fidélité, cotées comme l'action d'origine.
+ */
+export function splitLabel(raw) {
+  let label = cleanText(raw);
+  let ticker = '';
+  const m = label.match(/\s*\(([^()]*)\)\s*$/);
+  if (m) {
+    label = label.slice(0, m.index).trim();
+    if (/^[A-Z0-9.]{1,12}$/i.test(m[1].trim())) ticker = m[1].trim().toUpperCase();
+  }
+  const pf = label.match(/^(.*?)\s+PF\s?\d{2,4}$/i);
+  return { label, ticker, baseLabel: pf ? pf[1].trim() : '' };
+}
+
+/** Variation : 0.0069 (fraction) ou "0,69 %" (texte en pourcentage). */
+function parsePercent(value) {
+  const n = parseNumber(value);
+  if (n === null) return null;
+  return typeof value === 'string' && value.includes('%') ? n / 100 : n;
 }
 
 function cleanText(v) {

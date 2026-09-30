@@ -57,6 +57,7 @@ export function normalizeOperation(record) {
     key: securityKey(record),
     label: record.label,
     isin: record.isin || '',
+    ticker: record.ticker || '',
     quantity,
     price: abs(record.price) ?? (quantity && gross ? gross / quantity : null),
     gross: gross ?? net ?? 0,
